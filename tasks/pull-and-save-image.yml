@@ -1,0 +1,39 @@
+---
+### These tasks atomically pull and save an image from the designated registry into to specified local directory
+### Since login happened already no need to pass the authfile 
+- name: Pull an image
+  #become: true
+  podman_image:
+    pull: yes
+    validate_certs: false
+    name: "{{ image }}"
+  register: image_pulled
+  until: 
+  - "not image_pulled.failed | bool "
+  retries: 3
+  delay: 10
+  changed_when: false
+
+- name: Save image to local directory
+  command: >
+    podman save {{ image }} -o {{ mirred_content_local_dir }}/{{ image.split('/')[-1].split(':')[0] }}-{{ image.split(':')[-1] }}.tar
+  when:
+    - image_pulled is defined
+    - image_pulled.actions is defined
+    - image_pulled.actions[0] is defined
+    - "'Pulled' in image_pulled.actions[0]"
+  failed_when:
+    - image_saved.rc > 0
+    - "not 'support modifying existing images' in image_saved.stderr" 
+  register: image_saved
+
+- name: remove image from local cache
+  command: >
+    podman rmi {{ image }}
+  when:
+    - image_pulled is defined
+    - image_pulled.actions is defined
+    - image_pulled.actions[0] is defined
+    - "'Pulled' in image_pulled.actions[0]"
+  register: image_removed
+  

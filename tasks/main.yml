@@ -1,0 +1,36 @@
+---
+# tasks file for image-sync
+
+### Add task to process list if needed
+- name: Set Images to process fact if not set
+  set_fact:
+    images_to_process: "{{ images }}"
+  when:
+    - not images_to_process is defined
+
+- name: Set Local content sync directory name if named differently
+  set_fact:
+    mirred_content_local_dir: "{{ sync_dir }}"
+  when: 
+    - not mirred_content_local_dir is defined
+    - sync_dir is defined
+
+- name: Login to the registry and create the authfile if none was provided
+  command: >
+    podman login --authfile={{ lookup('env', 'HOME') }}/.docker/config.json  -u {{ registry_username }} -p {{ registry_password }} {{ images_to_process[0].split('/')[0] }}
+  when:
+    - not registry_auth_file is defined or (registry_auth_file is defined and registry_auth_file == "")
+  register: logged_in
+
+- name: Set authentication file variable if different from what is expected
+  set_fact:
+    registry_auth_file: "{{ lookup('env', 'HOME') }}/.docker/config.json "
+  when: 
+    - logged_in is defined
+    - logged_in.rc == 0
+
+- name: Porcess Images
+  include_tasks: pull-and-save-image.yml
+  loop: "{{ images_to_process }}"
+  loop_control:
+    loop_var: image
